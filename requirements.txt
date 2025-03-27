@@ -1,0 +1,14 @@
+torch
+torchvision
+numpy
+scipy
+networkx
+matplotlib
+tqdm
+scikit-learn
+pandas
+torch-geometric
+torch-sparse
+torch-scatter
+torch-cluster
+torch-spline-conv

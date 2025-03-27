@@ -1,0 +1,10 @@
+pandas
+geopandas
+numpy
+scipy
+matplotlib
+shapely
+networkx
+scikit-learn
+torch
+libpysal

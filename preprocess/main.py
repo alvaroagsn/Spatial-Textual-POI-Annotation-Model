@@ -64,6 +64,20 @@ class Preprocess():
         self.pois_filename = pois_filename
         self.boroughs_filename = boroughs_filename
         self.city = city
+        self.place_dict = {}
+        self.place_id_counter = 100000
+
+    def _get_place_id(self, lat, lon):
+        """Generate unique place_id based on latitude and longitude"""
+        key = (lat, lon)
+        if key not in self.place_dict:
+            self.place_dict[key] = self.place_id_counter
+            self.place_id_counter += 1
+        return self.place_dict[key]
+
+    def _generate_place_ids(self):
+        """Create place_id for each POI based on its coordinates"""
+        self.pois["place_id"] = self.pois.apply(lambda row: self._get_place_id(row["lat"], row["lng"]), axis=1)
 
     def _read_poi_data(self):
         self.pois = pd.read_csv(self.pois_filename)
@@ -85,8 +99,6 @@ class Preprocess():
         le_first_level_name_mapping = dict(zip(first_level.transform(first_level.classes_), first_level.classes_))
         le_second_level_name_mapping = dict(zip(second_level.transform(second_level.classes_), second_level.classes_))
 
-        print(le_first_level_name_mapping)
-
         with open(f'../data/le_first_level_name_mapping_{self.city}.pkl', 'wb') as f:
             pkl.dump(le_first_level_name_mapping, f)
         
@@ -96,9 +108,8 @@ class Preprocess():
         self.pois["category"] = first_level.fit_transform(self.pois["level_0"].values)
         self.pois["fclass"] = second_level.fit_transform(self.pois["level_1"].values)
 
-        print(self.pois.shape)
-        self.pois = self.pois[['id', 'category', 'fclass', 'geometry']].sjoin(self.boroughs, how='inner', predicate='intersects')
-        print(self.pois.shape)
+        self.pois = self.pois[['id', 'category', 'fclass', 'geometry', 'place_id', 'level_0']].sjoin(self.boroughs, how='inner', predicate='intersects')
+        
     def _read_embedding(self):
         from warnings import simplefilter
         simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
@@ -118,32 +129,36 @@ class Preprocess():
                 print(i)
                 self.embedding_array_test.append([0]*7)
             else:
-                # print(self.embedding_array.iloc[neighbors].mean(axis=0).values)
                 self.embedding_array_test.append(self.embedding_array.iloc[neighbors].mean(axis=0).values)
 
         self.embedding_array_test = pd.DataFrame(self.embedding_array_test, columns=self.embedding_array.columns)
-        
-        # print(len(self.embedding_array), len(self.embedding_array_test))
 
     def _create_graph(self):
         # if os.path.exists('../data/edges.csv'):
         #     self.edges = pd.read_csv('../data/edges.csv')
         #     return
         
+        points = np.array(self.pois.geometry.apply(lambda x: [x.x, x.y]).tolist())
         D = Util.diagonal_length_min_box(self.pois.geometry.unary_union.envelope.bounds)
 
-        coordinates = np.column_stack((self.pois.geometry.x, self.pois.geometry.y))
-        cells, generators = voronoi_frames(coordinates, clip="extent")
-        delaunay = weights.Rook.from_dataframe(cells)
-        G = delaunay.to_networkx()
-        positions = dict(zip(G.nodes, coordinates))
-       
-        for edges in G.edges:
-            x, y = edges
-            dist = Util.haversine_np(*positions[x], *positions[y])
-            w1 = np.log((1+D**(3/2))/(1+dist**(3/2)))
-            w2 = Util.intra_inter_region_transition(self.pois.iloc[x], self.pois.iloc[y])
-            G[x][y]['weight'] = w1*w2
+        triangles = scipy.spatial.Delaunay(points, qhull_options="QJ QbB Pp").simplices
+
+        G = nx.Graph()
+        G.add_nodes_from(range(len(points)))
+
+        from itertools import combinations
+
+        for simplex in triangles:
+            comb = combinations(simplex, 2)
+            for x, y in comb:
+                if not G.has_edge(x, y):
+                    dist = Util.haversine_np(*points[x], *points[y])
+                    w1 = np.log((1+D**(3/2))/(1+dist**(3/2)))
+                    w2 = Util.intra_inter_region_transition(
+                        self.pois.iloc[x], 
+                        self.pois.iloc[y],
+                    )
+                    G.add_edge(x, y, weight=w1*w2)
         
         self.edges = nx.to_pandas_edgelist(G)
         mi = self.edges['weight'].min()
@@ -155,6 +170,9 @@ class Preprocess():
     def get_data_torch(self):
         print("reading poi data")
         self._read_poi_data()
+
+        print("generating place IDs")
+        self._generate_place_ids()
         
         print("reading boroughs data")
         self._read_boroughs_data()
@@ -174,21 +192,24 @@ class Preprocess():
         data['embedding_array_test'] = self.embedding_array_test.values
         data['number_pois'] = len(self.embedding_array_test)
         data['y'] = self.pois['category'].values
+        data['place_id'] = self.pois['place_id'].values
+        data['level_0'] = self.pois['level_0'].values
 
         return data
     
 if __name__ == "__main__":
-    city = 'florida'
+    city = 'illinois_cat_placeid'
 
-    pois_filename = f"../../data/pois_local_{city}.csv"
-    boroughs_filename = f"../../data/cta_{city}.csv"
+    pois_filename = f"C:/Users/alvar/OneDrive/Documentos/GitHub/Spatial-Textual-POI-Annotation-Model/data/pois_local_{city}.csv"
+    boroughs_filename = f"C:/Users/alvar/OneDrive/Documentos/GitHub/Spatial-Textual-POI-Annotation-Model/data/cta_chicago.csv"
     # edges_filename = "../../poi-encoder/data/edges.csv"
     pre = Preprocess(pois_filename, boroughs_filename, city)
     data = pre.get_data_torch()
-    # print(data)
 
-    with open(f"../data/{city}_data.pkl", "wb") as f:
+    with open(f"C:/Users/alvar/OneDrive/Documentos/GitHub/Spatial-Textual-POI-Annotation-Model/data/{city}_data.pkl", "wb") as f:
         pkl.dump(data, f)
+
+    print(data)
 
     print("Data saved")
 

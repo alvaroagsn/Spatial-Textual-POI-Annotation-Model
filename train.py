@@ -16,7 +16,7 @@ import pandas as pd
 def parse_args():
     """ parsing the arguments that are used in HGI """
     parser = argparse.ArgumentParser()
-    parser.add_argument('--city', type=str, default='texas', help='city name')
+    parser.add_argument('--city', type=str, default='illinois_cat', help='city name')
     parser.add_argument('--dim', type=int, default=32, help='Dimension of output representation')
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--gamma', type=float, default=1)
@@ -157,7 +157,7 @@ if __name__ == '__main__':
 
     city = args.city
 
-    city_dict_file = f'./data/{city}_data.pkl'
+    city_dict_file = f'C:/Users/alvar/OneDrive/Documentos/GitHub/Spatial-Textual-POI-Annotation-Model/data/{city}_data.pkl'
     with open(city_dict_file, 'rb') as handle:
         city_dict = pkl.load(handle)
     data = Data(embedding_array=torch.tensor(city_dict['embedding_array'], dtype=torch.float32),
@@ -165,7 +165,7 @@ if __name__ == '__main__':
                      edge_index=torch.tensor(city_dict['edge_index'], dtype=torch.int64),
                      edge_weight=torch.tensor(city_dict['edge_weight'], dtype=torch.float32),
                      number_pois=city_dict['number_pois'],
-                     y=torch.tensor(city_dict['y'], dtype=torch.int64),)
+                     y=torch.tensor(city_dict['y'], dtype=torch.float64))
     print(data.number_pois)
 
     precision = []
@@ -178,7 +178,7 @@ if __name__ == '__main__':
 
     import pickle as pkl
 
-    with open(f'./data/le_first_level_name_mapping_{city}.pkl', 'rb') as f:
+    with open(f'C:/Users/alvar/OneDrive/Documentos/GitHub/Spatial-Textual-POI-Annotation-Model/data/le_first_level_name_mapping_{city}.pkl', 'rb') as f:
         map = pkl.load(f)
 
     values = list(map.values())
@@ -202,10 +202,10 @@ if __name__ == '__main__':
         f1_avg_list.append(f1_avg)
         f1_weighted_list.append(f1_weighted)
     df = pd.DataFrame(list(zip(precision, recall, fscore, ['STPA']*5*7, labels_unique, [city.capitalize()]*5*7)), columns=['precision', 'recall', 'fscore', 'Model', 'category', 'state'])
-    df.to_csv(f'./data/{city}_results.csv', index=False)
+    df.to_csv(f'C:/Users/alvar/OneDrive/Documentos/GitHub/Spatial-Textual-POI-Annotation-Model/data/{city}_results.csv', index=False)
 
     df = pd.DataFrame(list(zip(accuracy, f1_avg_list, f1_weighted_list, ['STPA']*5, list(range(1,5+1)), [city.capitalize()]*5)), columns=['accuracy', 'macro_avg', 'weighted_avg', 'Model', 'fold', 'state'])
-    df.to_csv(f'./data/{city}_general_results.csv', index=False)
+    df.to_csv(f'C:/Users/alvar/OneDrive/Documentos/GitHub/Spatial-Textual-POI-Annotation-Model/data/{city}_general_results.csv', index=False)
 
 
     # {'Community': 0, 'Entertainment': 1, 'Food': 2, 'Nightlife': 3, 'Outdoors': 4, 'Shopping': 5, 'Travel': 6}
